@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feedback — SourceScope</title>
+  <meta name="description" content="Send structured feedback about SourceScope, a Wikipedia research assistant Chrome extension.">
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span><span>SourceScope</span></a>
+      <nav class="nav-links"><a href="index.html#features">Features</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="methodology.html">Methodology</a><a href="mailto:SourceScope@pm.me">Support</a></nav>
+    </div>
+  </header>
+  <main class="policy-page">
+    <section class="container feedback-shell">
+      <p class="eyebrow">Feedback</p>
+      <h1>What should SourceScope improve?</h1>
+      <p>Select anything that applies. Details are optional, but they help more than the checkbox alone.</p>
+
+      <form class="feedback-form" id="feedbackForm">
+        <fieldset>
+          <legend>Select all that apply</legend>
+          <label><input type="checkbox" name="reason" value="Hard to understand or use"> Hard to understand or use</label>
+          <label><input type="checkbox" name="reason" value="Not useful enough"> Not useful enough</label>
+          <label><input type="checkbox" name="reason" value="Missing something I needed"> Missing something I needed</label>
+          <label><input type="checkbox" name="reason" value="Bug or broken behavior"> Bug or broken behavior</label>
+          <label><input type="checkbox" name="reason" value="Too slow or unreliable"> Too slow or unreliable</label>
+          <label><input type="checkbox" name="reason" value="Too expensive"> Too expensive</label>
+          <label><input type="checkbox" name="reason" value="Privacy, account, or payment concern"> Privacy, account, or payment concern</label>
+          <label><input type="checkbox" name="reason" value="No longer needed"> No longer needed</label>
+          <label><input type="checkbox" name="reason" value="Other"> Other</label>
+        </fieldset>
+
+        <label class="feedback-note-label" for="feedbackDetails">Anything else?</label>
+        <textarea id="feedbackDetails" name="details" rows="6" placeholder="Optional. Tell us what happened or what would have made SourceScope worth keeping."></textarea>
+
+        <div class="feedback-actions">
+          <button class="button button-primary" type="submit" id="sendFeedback">Send feedback</button>
+        </div>
+        <p class="note" id="feedbackStatus" role="status" aria-live="polite">Feedback submits to Google Forms. One response per extension version is allowed on this device. Do not include passwords, card numbers, or sensitive personal information.</p>
+      </form>
+
+      <div class="feedback-success" id="feedbackSuccess" hidden role="status" aria-live="polite">
+        <div class="feedback-success-icon" aria-hidden="true">✓</div>
+        <h2>Thanks for the feedback.</h2>
+        <p>Your response was submitted. You can close this page now.</p>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const GOOGLE_FORM_ACTION = "https://docs.google.com/forms/d/e/1FAIpQLSeYtMSF3zBHbPZK_6yUDxoqyJHWS_e_1YsmQcajkIxokW8c5g/formResponse";
+      const REASON_FIELD = "entry.1276645847";
+      const DETAILS_FIELD = "entry.871404342";
+      const HISTORY_KEY = "sourcescope_feedback_history_v1";
+
+      const form = document.getElementById("feedbackForm");
+      const sendButton = document.getElementById("sendFeedback");
+      const status = document.getElementById("feedbackStatus");
+      const successPanel = document.getElementById("feedbackSuccess");
+      const params = new URLSearchParams(window.location.search);
+      const source = params.get("source") || "feedback page";
+      const version = params.get("version") || "unknown";
+      const normalizedVersion = String(version || "unknown").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const submittedKey = `sourcescope_feedback_submitted_${normalizedVersion}`;
+
+      function readFeedbackHistory() {
+        try {
+          return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "{}");
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function writeFeedbackHistory(history) {
+        try {
+          window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        } catch (error) {
+        }
+      }
+
+      function markVersionSubmitted() {
+        try {
+          window.localStorage.setItem(submittedKey, "true");
+        } catch (error) {
+        }
+        const history = readFeedbackHistory();
+        history[normalizedVersion] = new Date().toISOString();
+        writeFeedbackHistory(history);
+      }
+
+      function hasSubmittedForVersion() {
+        try {
+          if (window.localStorage.getItem(submittedKey) === "true") {
+            return true;
+          }
+        } catch (error) {
+        }
+        const history = readFeedbackHistory();
+        return Boolean(history[normalizedVersion]);
+      }
+
+      function getPayload() {
+        const reasons = [...form.querySelectorAll('input[name="reason"]:checked')].map((input) => input.value);
+        const details = document.getElementById("feedbackDetails").value.trim();
+        const metadata = [
+          "",
+          "--- SourceScope metadata ---",
+          `Source: ${source}`,
+          `Extension version: ${version}`,
+          `Page: ${window.location.href}`,
+          `Browser: ${navigator.userAgent}`,
+          `Submitted at: ${new Date().toISOString()}`
+        ].join("\n");
+        return { reasons, details, formDetails: `${details || "No extra details."}${metadata}` };
+      }
+
+      function submitToGoogleForm(payload) {
+        const data = new URLSearchParams();
+        payload.reasons.forEach((reason) => data.append(REASON_FIELD, reason));
+        data.append(DETAILS_FIELD, payload.formDetails);
+
+        window.fetch(GOOGLE_FORM_ACTION, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body: data.toString(),
+          keepalive: true
+        }).catch(() => {});
+      }
+
+      function setFormDisabled(disabled) {
+        [...form.elements].forEach((element) => {
+          element.disabled = disabled;
+        });
+      }
+
+      function showSubmittedState(alreadySubmitted = false) {
+        form.hidden = true;
+        form.classList.add("is-hidden");
+        form.setAttribute("aria-hidden", "true");
+        form.style.display = "none";
+        successPanel.hidden = false;
+        successPanel.style.display = "block";
+        if (alreadySubmitted) {
+          successPanel.querySelector("h2").textContent = "Feedback already submitted.";
+          successPanel.querySelector("p").textContent = `Thanks — this device already submitted feedback for version ${version}.`;
+        } else {
+          successPanel.querySelector("h2").textContent = "Thanks for the feedback.";
+          successPanel.querySelector("p").textContent = "Your response was submitted. You can close this page now.";
+        }
+        successPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      if (hasSubmittedForVersion()) {
+        showSubmittedState(true);
+        return;
+      }
+
+      let hasSubmitted = false;
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (hasSubmitted) {
+          return;
+        }
+
+        const payload = getPayload();
+        if (!payload.reasons.length && !payload.details) {
+          status.textContent = "Select at least one option or add a short note.";
+          return;
+        }
+
+        hasSubmitted = true;
+        setFormDisabled(true);
+        sendButton.textContent = "Submitted";
+        status.textContent = "Feedback submitted.";
+
+        markVersionSubmitted();
+
+        showSubmittedState(false);
+
+        submitToGoogleForm(payload);
+      });
+    })();
+  </script>
+</body>
+</html>
